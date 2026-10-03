@@ -110,7 +110,7 @@ def api_topics():
 
 @app.route('/study/add',methods=['GET','POST'])
 def study_add():
- if session.get('role')!='student': return redirect('/')
+ if session.get('role') not in ['student','coach']: return redirect('/')
  u=user(session['uid']); lessons=COURSES.get(u['level'],[])
  if request.method=='POST':
   c=db(); c.execute('INSERT INTO study(user_id,d,exam_type,lesson,topic,correct_n,wrong_n,blank_n,minutes,note) VALUES(?,?,?,?,?,?,?,?,?,?)',(u['id'],request.form['d'],u['level'],request.form['lesson'],request.form['topic'],int(request.form['correct_n']),int(request.form['wrong_n']),int(request.form['blank_n']),int(request.form.get('minutes') or 0),request.form.get('note',''))); c.commit(); c.close(); return redirect('/')
@@ -154,7 +154,7 @@ def reviews():
 
 @app.route('/student/<int:uid>')
 def detail(uid):
- if session.get('role')!='coach':return redirect('/')
+ if session.get('role') not in ('coach','student'): return redirect('/')
  s=user(uid); c=db(); rows=c.execute('SELECT * FROM study WHERE user_id=? ORDER BY d DESC,id DESC LIMIT 200',(uid,)).fetchall(); c.close(); agg={}
  for r in rows:
   k=(r['lesson'],r['topic']); v=agg.setdefault(k,[0,0,0]); v[0]+=r['correct_n'];v[1]+=r['wrong_n'];v[2]+=r['blank_n']
