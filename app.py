@@ -122,17 +122,124 @@ def exam_lessons(level,et):
  if et in EXAM_LESSONS:return EXAM_LESSONS[et]
  if et=='LGS Branş' or et=='Branş Denemesi': return COURSES.get(level,[])
  return COURSES.get(level,[])
-@app.route('/exam/add',methods=['GET','POST'])
+@app.route('/exam/add', methods=['GET', 'POST'])
 def exam_add():
- if session.get('role')!='student': return redirect('/')
- u=user(session['uid']); types=EXAMS.get(u['level'],['Genel Deneme']); et=request.args.get('type') or request.form.get('exam_type') or types[0]; lessons=exam_lessons(u['level'],et)
- if request.method=='POST':
-  c=db(); cur=c.execute('INSERT INTO exam_sessions(user_id,d,exam_type,title) VALUES(?,?,?,?)',(u['id'],request.form['d'],et,request.form['title'])); sid=cur.lastrowid
-  for i,l in enumerate(lessons): c.execute('INSERT INTO exam_results(session_id,lesson,correct_n,wrong_n,blank_n) VALUES(?,?,?,?,?)',(sid,l,int(request.form.get(f'd{i}') or 0),int(request.form.get(f'y{i}') or 0),int(request.form.get(f'b{i}') or 0)))
-  c.commit(); c.close(); return redirect('/')
- links=' '.join(f'<a class="btn" href="/exam/add?type={x}">{x}</a>' for x in types); fields=''
- for i,l in enumerate(lessons): fields+=f'<div class="card"><h3>{l}</h3><div class="grid"><div><label>D</label><input type="number" min="0" name="d{i}" value="0"></div><div><label>Y</label><input type="number" min="0" name="y{i}" value="0"></div><div><label>B</label><input type="number" min="0" name="b{i}" value="0"></div></div></div>'
- return shell('Deneme Girişi',f'<h1>{u["level"]} — {et}</h1><p>{links}</p><form method="post"><input type="hidden" name="exam_type" value="{et}"><div class="card"><label>Tarih</label><input type="date" name="d" value="{date.today()}" required><label>Deneme adı</label><input name="title" required></div>{fields}<button>Denemeyi Kaydet</button></form>')
+    if session.get('role') != 'student':
+        return redirect('/')
+
+    u = user(session['uid'])
+    types = EXAMS.get(u['level'], ['Genel Deneme'])
+    et = request.args.get('type') or request.form.get('exam_type') or types[0]
+
+    # Branş denemesinde önce ders seçilir
+    if et == 'Branş Denemesi':
+        lessons = COURSES.get(u['level'], [])
+        selected_lesson = request.args.get('lesson') or request.form.get('selected_lesson')
+
+        if request.method == 'POST' and selected_lesson:
+            c = db()
+            cur = c.execute(
+                'INSERT INTO exam_sessions(user_id,d,exam_type,title) VALUES(?,?,?,?)',
+                (u['id'], request.form['d'], et, request.form['title'])
+            )
+            sid = cur.lastrowid
+
+            c.execute(
+                'INSERT INTO exam_results(session_id,lesson,correct_n,wrong_n,blank_n) VALUES(?,?,?,?,?)',
+                (
+                    sid,
+                    selected_lesson,
+                    int(request.form.get('d0') or 0),
+                    int(request.form.get('y0') or 0),
+                    int(request.form.get('b0') or 0)
+                )
+            )
+            c.commit()
+            c.close()
+            return redirect('/')
+
+        lesson_options = ''.join(
+            f'<option value="{x}" {"selected" if x == selected_lesson else ""}>{x}</option>'
+            for x in lessons
+        )
+
+        fields = f'''
+        <div class="card">
+            <label>Ders</label>
+            <select name="selected_lesson" required>
+                <option value="">Ders seçiniz</option>
+                {lesson_options}
+            </select>
+            <div class="grid">
+                <div><label>Doğru</label><input type="number" min="0" name="d0" value="0"></div>
+                <div><label>Yanlış</label><input type="number" min="0" name="y0" value="0"></div>
+                <div><label>Boş</label><input type="number" min="0" name="b0" value="0"></div>
+            </div>
+        </div>
+        '''
+
+    else:
+        lessons = exam_lessons(u['level'], et)
+
+        if request.method == 'POST':
+            c = db()
+            cur = c.execute(
+                'INSERT INTO exam_sessions(user_id,d,exam_type,title) VALUES(?,?,?,?)',
+                (u['id'], request.form['d'], et, request.form['title'])
+            )
+            sid = cur.lastrowid
+
+            for i, lesson in enumerate(lessons):
+                c.execute(
+                    'INSERT INTO exam_results(session_id,lesson,correct_n,wrong_n,blank_n) VALUES(?,?,?,?,?)',
+                    (
+                        sid,
+                        lesson,
+                        int(request.form.get(f'd{i}') or 0),
+                        int(request.form.get(f'y{i}') or 0),
+                        int(request.form.get(f'b{i}') or 0)
+                    )
+                )
+
+            c.commit()
+            c.close()
+            return redirect('/')
+
+        fields = ''
+        for i, lesson in enumerate(lessons):
+            fields += f'''
+            <div class="card">
+                <h3>{lesson}</h3>
+                <div class="grid">
+                    <div><label>Doğru</label><input type="number" min="0" name="d{i}" value="0"></div>
+                    <div><label>Yanlış</label><input type="number" min="0" name="y{i}" value="0"></div>
+                    <div><label>Boş</label><input type="number" min="0" name="b{i}" value="0"></div>
+                </div>
+            </div>
+            '''
+
+    links = ' '.join(
+        f'<a class="btn" href="/exam/add?type={x}">{x}</a>'
+        for x in types
+    )
+
+    return shell(
+        'Deneme Girişi',
+        f'''<h1>{u["level"]} — {et}</h1>
+        <p>{links}</p>
+        <form method="post">
+            <input type="hidden" name="exam_type" value="{et}">
+            <div class="card">
+                <label>Tarih</label>
+                <input type="date" name="d" value="{date.today()}" required>
+                <label>Deneme adı</label>
+                <input name="title" required>
+            </div>
+            {fields}
+            <button>Denemeyi Kaydet</button>
+        </form>'''
+    )
+
 
 @app.route('/goals',methods=['GET','POST'])
 def goals():
